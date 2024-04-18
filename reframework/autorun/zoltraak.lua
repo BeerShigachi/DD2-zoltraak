@@ -244,7 +244,7 @@ local function resetScript()
     _human = nil
     _staminaManager = nil
     _is_requested_by_player = false
-    _charge_deltatime = 0.0
+    _charge_deltatime = 1.0
 end
 
 -- could use sdk.find_type_definition("app.GuiManager"):get_method("OnChangeSceneType")
@@ -326,7 +326,7 @@ re_.on_frame(function ()
             local cost = max_stamina * 0.1 * -1.0
             staminaManager:add(cost / ALLIVIATE_STAMINA_COST, false)
         else
-            _charge_deltatime = 0.0
+            _charge_deltatime = 1.0
         end
     end
 end)
