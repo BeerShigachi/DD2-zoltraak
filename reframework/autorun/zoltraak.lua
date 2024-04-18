@@ -315,13 +315,11 @@ local application_type = sdk_.find_type_definition("via.Application")
 
 re_.on_frame(function ()
     _human = GetManualPlayerHuman()
-    print(sdk_.call_native_func(applicatioin, application_type, "get_DeltaTime"))
     if _is_requested_by_player then
         local magic_user_action_context = GetMagicUserActionContext()
         if magic_user_action_context:get_IsChargingShot() then
             if _charge_deltatime < POWER_ATTACK_CHARGE_PERIOD then
                 _charge_deltatime = _charge_deltatime + sdk_.call_native_func(applicatioin, application_type, "get_DeltaTime")
-                print(_charge_deltatime)
             end
             local staminaManager = GetStaminaManager()
             local max_stamina = staminaManager:get_MaxValue()
