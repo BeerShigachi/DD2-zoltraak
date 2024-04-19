@@ -2,15 +2,15 @@
 -- date : 18 April 2024
 
 -- CONFIG:
-local POWER_ATTACK_CHARGE_PERIOD = 7.0 -- 1 as default. longer charging period results higher damage.
+local POWER_ATTACK_CHARGE_PERIOD = 5.0 -- 1 as default. longer charging period results higher damage.
 local QUICK_CHARGE_PERIOD = 0.5 -- 1 as default
 local COMBO_INTERVAL = 0.1 -- default: 0.28
 
 local COMBO_ATTACK_RATE = 1.5 -- defalut: 1.0
 local COMBO_REACTION_RATE = 1.5 -- default: 1.0
 local POWER_ATTACK_RATE = 1.5 -- CAUTION: set this value high result too OP! 
-local POWER_REACTION_RATE = 3 -- CAUTION: set this value high result too OP!
-local ALLIVIATE_STAMINA_COST = 100
+local POWER_REACTION_RATE = 3.0 -- CAUTION: set this value high result too OP!
+local ALLIVIATE_STAMINA_COST = 100.0
 
 -- DO NOT TOUCH UNDER THIS LINE
 local re_ = re
@@ -20,7 +20,7 @@ local _is_requested_by_player = false
 local _charge_deltatime = 0.0
 local lastFrameTime = os.clock()
 local elapsedTime = 0.0
-local _is_intercepted = false
+local _is_spell = false
 
 local _characterManager
 local function GetCharacterManager()
@@ -118,7 +118,7 @@ end
 
 local _powerShotParameter
 local function GetHeavyShotParameter()
-    _powerShotParameter = _get_component(_powerShotParameter, GetMageParam, "get_BurstShotParamProp")
+    _powerShotParameter = _get_component(_powerShotParameter, GetMageParam, "get_PowerShotParamProp")
     return _powerShotParameter
 end
 
@@ -169,61 +169,61 @@ local function on_post_requestNormalAttack(args)
         if current_job == 6 or current_job == 3 then
             local obj_chara = sdk_.to_managed_object(args[2]):get_field("Param"):get_field("Chara")
             if _player_chara == obj_chara then
+                _is_spell = false
                 _is_requested_by_player = true
-                _is_intercepted = false
                 updateBurstShotParameter(POWER_ATTACK_CHARGE_PERIOD)
                 updatePowerShotParameter(POWER_ATTACK_CHARGE_PERIOD)
                 print("player attacked")
             else
-                _is_intercepted = true
                 print("someone else attacked!")
             end
-        else
-            print("wrong vocations")
         end
     end
 end
 
-local function on_post_release_action(rtval)
-    if _is_requested_by_player and not _is_intercepted then
-        local hit = GetHitController()
-        if hit then
+local function on_post_release_action(args)
+    if _is_spell then return end
+    if not _player_chara then _player_chara = GetManualPlayer() end
+    if _player_chara and _player_chara == sdk_.to_managed_object(args[2]):get_field("<Chara>k__BackingField") then
+        if not _hit_controller then _hit_controller = GetHitController() end
+        if _hit_controller then
             local magic_user_action_context = GetMagicUserActionContext()
             if magic_user_action_context then
                 if not magic_user_action_context:get_IsChargingShot() then
-                    hit:set_BaseAttackRate(COMBO_ATTACK_RATE)
-                    hit:set_BaseReactionDamageRate(COMBO_REACTION_RATE)
+                    _hit_controller:set_BaseAttackRate(COMBO_ATTACK_RATE)
+                    _hit_controller:set_BaseReactionDamageRate(COMBO_REACTION_RATE)
                 else
-                    if _charge_deltatime < 1 then
-                        hit:set_BaseAttackRate(POWER_ATTACK_RATE)
-                        hit:set_BaseReactionDamageRate(POWER_REACTION_RATE)
+                    if _charge_deltatime < 1.0 then
+                        _hit_controller:set_BaseAttackRate(POWER_ATTACK_RATE)
+                        _hit_controller:set_BaseReactionDamageRate(POWER_REACTION_RATE)
+                    else
+                        _hit_controller:set_BaseAttackRate(POWER_ATTACK_RATE * _charge_deltatime)
+                        _hit_controller:set_BaseReactionDamageRate(POWER_REACTION_RATE * _charge_deltatime)
+                        _charge_deltatime = 0.0
                     end
-                    hit:set_BaseAttackRate(POWER_ATTACK_RATE * _charge_deltatime)
-                    hit:set_BaseReactionDamageRate(POWER_REACTION_RATE * _charge_deltatime)
-                    _charge_deltatime = 0.0
                 end
-                print("new attack rate ", hit:get_BaseAttackRate(), hit:get_BaseReactionDamageRate())
+                print("new attack rate ", _hit_controller:get_BaseAttackRate(), _hit_controller:get_BaseReactionDamageRate())
                 _is_requested_by_player = false
             end
         end
     else
-        _is_intercepted = false
     end
-    return rtval
 end
 
-local function on_pre_get_spell_action ()
-    _is_intercepted = true
+local function on_pre_set_default ()
     local hit = GetHitController()
     if hit then
         hit:set_BaseAttackRate(_DEFAULT_VALUE) -- TODO CHECK real DEFAULT_VALUE
         hit:set_BaseReactionDamageRate(_DEFAULT_VALUE)
+        _is_spell = true
         print("custom skills or job changed", hit:get_BaseAttackRate(), hit:get_BaseReactionDamageRate())
     end
 end
 
-local function on_pre_request_combo(args)
-    _is_intercepted = true
+local function on_pre_set_rapid_charge_shot(args)
+    if _is_spell then
+        return
+    end
     _player_chara = GetManualPlayer()
     if _player_chara then
         local current_job = _player_chara:get_field("<Human>k__BackingField"):get_JobContext():get_field("CurrentJob")
@@ -259,7 +259,9 @@ local function resetScript()
     _human = nil
     _staminaManager = nil
     _is_requested_by_player = false
+    _is_spell = false
     _charge_deltatime = 0.0
+    _player_chara = GetManualPlayer()
 end
 
 -- could use sdk.find_type_definition("app.GuiManager"):get_method("OnChangeSceneType")
@@ -277,34 +279,49 @@ sdk_.hook(sdk_.find_type_definition("app.Player"):get_method(".ctor"),
 -- create the hook to update the base attack rate field to default when spell was used(pre hook) TRY POST HOOK FIRST!
 -- app.JobMagicUserActionSelector.getCustomSkillAction(app.HumanCustomSkillID, app.LocomotionSpeedTypeEnum)
 sdk_.hook(sdk_.find_type_definition("app.Job06ActionSelector"):get_method("getCustomSkillAction(app.HumanCustomSkillID, app.LocomotionSpeedTypeEnum)"),
-    on_pre_get_spell_action,
+    function (args)
+        if _player_chara == sdk_.to_managed_object(args[2]):get_field("<Chara>k__BackingField") then
+        on_pre_set_default()
+        end
+    end,
     function (rtval)
         return rtval
     end)
 
 sdk_.hook(sdk_.find_type_definition("app.Job03ActionSelector"):get_method("getCustomSkillAction(app.HumanCustomSkillID, app.LocomotionSpeedTypeEnum)"),
-    on_pre_get_spell_action,
+    function (args)
+        if _player_chara == sdk_.to_managed_object(args[2]):get_field("<Chara>k__BackingField") then
+        on_pre_set_default()
+        end
+    end,
     function (rtval)
         return rtval
     end)
 
 -- combo initialization.
 sdk_.hook(sdk_.find_type_definition("app.HumanActionSelector"):get_method("requestComboAction(app.LocomotionSpeedTypeEnum)"),
-    on_pre_request_combo,
+    on_pre_set_rapid_charge_shot,
     function (rtval)
         return rtval
     end)
 
 -- JobMagicUserActionSelector.getReleaseAction does not work!
+local _original_args_sorcerer
 sdk_.hook(sdk_.find_type_definition("app.Job06ActionSelector"):get_method("getReleaseAction(System.UInt32)"),
-    function (args) print(sdk_.to_managed_object(args[2]):get_field("<Chara>k__BackingField")) end,
-    on_post_release_action)
+    function (args) _original_args_sorcerer = args end,
+    function (rtval)
+        on_post_release_action(_original_args_sorcerer)
+        return rtval
+    end)
 
+local _original_args
 sdk_.hook(sdk_.find_type_definition("app.Job03ActionSelector"):get_method("getReleaseAction(System.UInt32)"),
-    function () end,
-    on_post_release_action)
+    function (args) _original_args = args end,
+    function (rtval)
+        on_post_release_action(_original_args)
+        return rtval
+    end)
 
--- this should hook app.Job06(and03)ActionSelector.getNormalAttackAction(app.LocomotionSpeedTypeEnum, System.UInt32)
 local _args_holder
 sdk_.hook(sdk_.find_type_definition("app.HumanActionSelector"):get_method("requestNormalAttack(app.LocomotionSpeedTypeEnum)"),
     function (args)
@@ -317,32 +334,28 @@ sdk_.hook(sdk_.find_type_definition("app.HumanActionSelector"):get_method("reque
 
 -- app.JobContext.setJobChanged(app.Character.JobEnum)
 sdk_.hook(sdk_.find_type_definition("app.JobContext"):get_method("setJobChanged(app.Character.JobEnum)"),
-    on_pre_get_spell_action,
+    on_pre_set_default,
     function (rtval)
-        -- _is_requested_by_player = false -- test if this works.
         return rtval
     end)
 
 re_.on_frame(function ()
     local currentTime = os.clock()
     local deltaTime = currentTime - lastFrameTime
-    -- elapsedTime = elapsedTime + deltaTime
     lastFrameTime = currentTime
-    _human = GetManualPlayerHuman()
     if _is_requested_by_player then
         local magic_user_action_context = GetMagicUserActionContext()
         if magic_user_action_context:get_IsChargingShot() then
             elapsedTime = elapsedTime + deltaTime
-            print(elapsedTime)
             if elapsedTime < POWER_ATTACK_CHARGE_PERIOD then
                 _charge_deltatime = elapsedTime
+                local staminaManager = GetStaminaManager()
+                local max_stamina = staminaManager:get_MaxValue()
+                local cost = max_stamina * 0.1 * -1.0
+                staminaManager:add(cost / ALLIVIATE_STAMINA_COST, false)
             else
                 _charge_deltatime = POWER_ATTACK_CHARGE_PERIOD
             end
-            local staminaManager = GetStaminaManager()
-            local max_stamina = staminaManager:get_MaxValue()
-            local cost = max_stamina * 0.1 * -1.0
-            staminaManager:add(cost / ALLIVIATE_STAMINA_COST, false)
         else
             _charge_deltatime = 0.0
             elapsedTime = 0.0
