@@ -17,7 +17,10 @@ local re_ = re
 local sdk_ = sdk
 local _DEFAULT_VALUE = 1.0
 local _is_requested_by_player = false
-local _charge_deltatime = 1.0
+local _charge_deltatime = 0.0
+local lastFrameTime = os.clock()
+local elapsedTime = 0.0
+local _is_intercepted = false
 
 local _characterManager
 local function GetCharacterManager()
@@ -158,6 +161,7 @@ local function GetStaminaManager()
     return _staminaManager
 end
 
+
 local function on_post_requestNormalAttack(args)
     _player_chara = GetManualPlayer()
     if _player_chara then
@@ -166,10 +170,12 @@ local function on_post_requestNormalAttack(args)
             local obj_chara = sdk_.to_managed_object(args[2]):get_field("Param"):get_field("Chara")
             if _player_chara == obj_chara then
                 _is_requested_by_player = true
+                _is_intercepted = false
                 updateBurstShotParameter(POWER_ATTACK_CHARGE_PERIOD)
                 updatePowerShotParameter(POWER_ATTACK_CHARGE_PERIOD)
                 print("player attacked")
             else
+                _is_intercepted = true
                 print("someone else attacked!")
             end
         else
@@ -179,7 +185,7 @@ local function on_post_requestNormalAttack(args)
 end
 
 local function on_post_release_action(rtval)
-    if _is_requested_by_player then
+    if _is_requested_by_player and not _is_intercepted then
         local hit = GetHitController()
         if hit then
             local magic_user_action_context = GetMagicUserActionContext()
@@ -188,18 +194,26 @@ local function on_post_release_action(rtval)
                     hit:set_BaseAttackRate(COMBO_ATTACK_RATE)
                     hit:set_BaseReactionDamageRate(COMBO_REACTION_RATE)
                 else
+                    if _charge_deltatime < 1 then
+                        hit:set_BaseAttackRate(POWER_ATTACK_RATE)
+                        hit:set_BaseReactionDamageRate(POWER_REACTION_RATE)
+                    end
                     hit:set_BaseAttackRate(POWER_ATTACK_RATE * _charge_deltatime)
                     hit:set_BaseReactionDamageRate(POWER_REACTION_RATE * _charge_deltatime)
+                    _charge_deltatime = 0.0
                 end
                 print("new attack rate ", hit:get_BaseAttackRate(), hit:get_BaseReactionDamageRate())
                 _is_requested_by_player = false
             end
         end
+    else
+        _is_intercepted = false
     end
     return rtval
 end
 
 local function on_pre_get_spell_action ()
+    _is_intercepted = true
     local hit = GetHitController()
     if hit then
         hit:set_BaseAttackRate(_DEFAULT_VALUE) -- TODO CHECK real DEFAULT_VALUE
@@ -209,6 +223,7 @@ local function on_pre_get_spell_action ()
 end
 
 local function on_pre_request_combo(args)
+    _is_intercepted = true
     _player_chara = GetManualPlayer()
     if _player_chara then
         local current_job = _player_chara:get_field("<Human>k__BackingField"):get_JobContext():get_field("CurrentJob")
@@ -244,7 +259,7 @@ local function resetScript()
     _human = nil
     _staminaManager = nil
     _is_requested_by_player = false
-    _charge_deltatime = 1.0
+    _charge_deltatime = 0.0
 end
 
 -- could use sdk.find_type_definition("app.GuiManager"):get_method("OnChangeSceneType")
@@ -282,7 +297,7 @@ sdk_.hook(sdk_.find_type_definition("app.HumanActionSelector"):get_method("reque
 
 -- JobMagicUserActionSelector.getReleaseAction does not work!
 sdk_.hook(sdk_.find_type_definition("app.Job06ActionSelector"):get_method("getReleaseAction(System.UInt32)"),
-    function () end,
+    function (args) print(sdk_.to_managed_object(args[2]):get_field("<Chara>k__BackingField")) end,
     on_post_release_action)
 
 sdk_.hook(sdk_.find_type_definition("app.Job03ActionSelector"):get_method("getReleaseAction(System.UInt32)"),
@@ -304,29 +319,33 @@ sdk_.hook(sdk_.find_type_definition("app.HumanActionSelector"):get_method("reque
 sdk_.hook(sdk_.find_type_definition("app.JobContext"):get_method("setJobChanged(app.Character.JobEnum)"),
     on_pre_get_spell_action,
     function (rtval)
-        _is_requested_by_player = false -- test if this works.
+        -- _is_requested_by_player = false -- test if this works.
         return rtval
     end)
 
-local applicatioin = sdk_.get_native_singleton("via.Application")
-local application_type = sdk_.find_type_definition("via.Application")
-
-
-
 re_.on_frame(function ()
+    local currentTime = os.clock()
+    local deltaTime = currentTime - lastFrameTime
+    -- elapsedTime = elapsedTime + deltaTime
+    lastFrameTime = currentTime
     _human = GetManualPlayerHuman()
     if _is_requested_by_player then
         local magic_user_action_context = GetMagicUserActionContext()
         if magic_user_action_context:get_IsChargingShot() then
-            if _charge_deltatime < POWER_ATTACK_CHARGE_PERIOD then
-                _charge_deltatime = _charge_deltatime + sdk_.call_native_func(applicatioin, application_type, "get_DeltaTime")
+            elapsedTime = elapsedTime + deltaTime
+            print(elapsedTime)
+            if elapsedTime < POWER_ATTACK_CHARGE_PERIOD then
+                _charge_deltatime = elapsedTime
+            else
+                _charge_deltatime = POWER_ATTACK_CHARGE_PERIOD
             end
             local staminaManager = GetStaminaManager()
             local max_stamina = staminaManager:get_MaxValue()
             local cost = max_stamina * 0.1 * -1.0
             staminaManager:add(cost / ALLIVIATE_STAMINA_COST, false)
         else
-            _charge_deltatime = 1.0
+            _charge_deltatime = 0.0
+            elapsedTime = 0.0
         end
     end
 end)
