@@ -1,13 +1,12 @@
 -- author : BeerShigachi
 -- date : 20 April 2024
 
--- CONFIG:
-local POWER_ATTACK_CHARGE_PERIOD = 3.0 -- 1 as default. longer charging period results higher damage.
-local RAPID_CHARGE_PERIOD = 0.5 -- 1 as default
+-- CONFIG: every values have to be float number. use float like 1.0 not 1.
+local POWER_ATTACK_CHARGE_PERIOD = 3.0 -- 1.0 as default. longer charging period results higher damage.
+local RAPID_CHARGE_PERIOD = 0.5 -- 1.0 as default
 local COMBO_INTERVAL = 0.1 -- default: 0.28
-
 local COMBO_ATTACK_RATE = 2.0 -- defalut: 1.0
-local POWER_ATTACK_RATE = 3.5 -- CAUTION: set this value high result too OP! 
+local POWER_ATTACK_RATE = 3.5 -- CAUTION: set this value too high result OP! 
 local ALLIVIATE_STAMINA_COST = 100.0 -- higher value expend less stamina.
 
 -- DO NOT TOUCH UNDER THIS LINE
