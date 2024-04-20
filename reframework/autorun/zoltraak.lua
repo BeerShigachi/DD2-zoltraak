@@ -3,12 +3,12 @@
 
 -- CONFIG:
 local POWER_ATTACK_CHARGE_PERIOD = 3.0 -- 1 as default. longer charging period results higher damage.
-local QUICK_CHARGE_PERIOD = 0.5 -- 1 as default
+local RAPID_CHARGE_PERIOD = 0.5 -- 1 as default
 local COMBO_INTERVAL = 0.1 -- default: 0.28
 
 local COMBO_ATTACK_RATE = 2.0 -- defalut: 1.0
 local POWER_ATTACK_RATE = 3.5 -- CAUTION: set this value high result too OP! 
-local ALLIVIATE_STAMINA_COST = 100.0
+local ALLIVIATE_STAMINA_COST = 100.0 -- higher value expend less stamina.
 
 -- DO NOT TOUCH UNDER THIS LINE
 local re_ = re
@@ -204,8 +204,8 @@ local function on_pre_set_rapid_charge_shot()
     if _is_spell then return end
     local current_job = _player_chara:get_field("<Human>k__BackingField"):get_JobContext():get_field("CurrentJob")
     if current_job == 6 or current_job == 3 then
-        updateBurstShotParameter(QUICK_CHARGE_PERIOD)
-        updatePowerShotParameter(QUICK_CHARGE_PERIOD)
+        updateBurstShotParameter(RAPID_CHARGE_PERIOD)
+        updatePowerShotParameter(RAPID_CHARGE_PERIOD)
         _hit_controller = GetHitController()
         if _hit_controller then
             _hit_controller:set_BaseAttackRate(COMBO_ATTACK_RATE)
@@ -214,7 +214,7 @@ local function on_pre_set_rapid_charge_shot()
     end
 end
 
-local function resetScript()
+local function initialize_()
     _character_manager = nil
     _human_param = nil
     _job_param = nil
@@ -235,25 +235,34 @@ local function resetScript()
     _player_chara = GetManualPlayer()
 end
 
+initialize_()
+
 -- could use sdk.find_type_definition("app.GuiManager"):get_method("OnChangeSceneType")
 sdk_.hook(sdk_.find_type_definition("app.Player"):get_method(".ctor"),
     function () end,
     function (...)
-        resetScript()
+        initialize_()
         updateSorcererRapidShot()
-        updateBurstShotParameter(QUICK_CHARGE_PERIOD)
+        updateBurstShotParameter(RAPID_CHARGE_PERIOD)
         updateMageRapidShot()
-        updatePowerShotParameter(QUICK_CHARGE_PERIOD)
+        updatePowerShotParameter(RAPID_CHARGE_PERIOD)
         return ...
     end)
 
--- create the hook to update the base attack rate field to default when spell was used(pre hook) TRY POST HOOK FIRST!
--- app.JobMagicUserActionSelector.getCustomSkillAction(app.HumanCustomSkillID, app.LocomotionSpeedTypeEnum)
--- HumanSkillID 62 salamander and 64 minevolt should be ignored.
+sdk.hook(
+    sdk.find_type_definition("app.GuiManager"):get_method("OnChangeSceneType"),
+    function() end,
+    function()
+        _player_chara = GetManualPlayer()
+        print("player character", _player_chara)
+    end
+)
+
+-- need to find methods to hook for HumanSkillID 62 salamander and 64 minevolt.
 sdk_.hook(sdk_.find_type_definition("app.Job06ActionSelector"):get_method("getCustomSkillAction(app.HumanCustomSkillID, app.LocomotionSpeedTypeEnum)"),
     function (args)
         if _player_chara == sdk_.to_managed_object(args[2]):get_field("<Chara>k__BackingField") then
-        on_pre_set_default()
+            on_pre_set_default()
         end
     end,
     function (rtval)
@@ -263,7 +272,7 @@ sdk_.hook(sdk_.find_type_definition("app.Job06ActionSelector"):get_method("getCu
 sdk_.hook(sdk_.find_type_definition("app.Job03ActionSelector"):get_method("getCustomSkillAction(app.HumanCustomSkillID, app.LocomotionSpeedTypeEnum)"),
     function (args)
         if _player_chara == sdk_.to_managed_object(args[2]):get_field("<Chara>k__BackingField") then
-        on_pre_set_default()
+            on_pre_set_default()
         end
     end,
     function (rtval)
@@ -314,7 +323,6 @@ sdk_.hook(sdk_.find_type_definition("app.HumanActionSelector"):get_method("reque
         return rtval
     end)
 
--- app.JobContext.setJobChanged(app.Character.JobEnum)
 sdk_.hook(sdk_.find_type_definition("app.JobContext"):get_method("setJobChanged(app.Character.JobEnum)"),
     on_pre_set_default,
     function (rtval)
