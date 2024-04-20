@@ -251,9 +251,10 @@ sdk_.hook(sdk_.find_type_definition("app.Player"):get_method(".ctor"),
 sdk.hook(
     sdk.find_type_definition("app.GuiManager"):get_method("OnChangeSceneType"),
     function() end,
-    function()
+    function(rtval)
         _player_chara = GetManualPlayer()
         print("player character", _player_chara)
+        return rtval
     end
 )
 
