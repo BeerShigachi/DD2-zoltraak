@@ -1,5 +1,6 @@
 -- author : BeerShigachi
--- date : 20 April 2024
+-- date : 24 April 2024
+-- version : 1.1.0
 
 -- CONFIG: every values have to be float number. use float like 1.0 not 1.
 local POWER_ATTACK_CHARGE_PERIOD = 3.0 -- 1.0 as default. longer charging period results higher damage.
@@ -8,6 +9,7 @@ local COMBO_INTERVAL = 0.1 -- default: 0.28
 local COMBO_ATTACK_RATE = 2.0 -- defalut: 1.0
 local POWER_ATTACK_RATE = 3.5 -- CAUTION: set this value too high result OP! 
 local ALLIVIATE_STAMINA_COST = 100.0 -- higher value expend less stamina.
+local DELAY_EXPLOSION = 0.1 -- default: 3.0 :set lower for insta explosion.
 
 -- DO NOT TOUCH UNDER THIS LINE
 local re_ = re
@@ -325,6 +327,22 @@ sdk_.hook(sdk_.find_type_definition("app.HumanActionSelector"):get_method("reque
 
 sdk_.hook(sdk_.find_type_definition("app.JobContext"):get_method("setJobChanged(app.Character.JobEnum)"),
     on_pre_set_default,
+    function (rtval)
+        return rtval
+    end)
+
+sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("registShell(app.Shell)"),
+    function (args)
+        local app_shell = sdk_.to_managed_object(args[3])
+        local caller_chara= app_shell:get_OwnerCharacter()
+        if caller_chara ~= _player_chara then return end
+        local shell_param = app_shell:get_ShellParameter()
+        local shell_base_param = shell_param:get_field("ShellBaseParam")
+        if app_shell:get_ShellParamId() == 1430605661 then
+            shell_base_param:set_field("LifeTime", DELAY_EXPLOSION)
+            args[3] = sdk_.to_ptr(app_shell)
+        end
+    end,
     function (rtval)
         return rtval
     end)
