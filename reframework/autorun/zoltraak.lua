@@ -1,24 +1,25 @@
 -- author : BeerShigachi
--- date : 24 April 2024
--- version : 1.1.0
+-- date : 26 April 2024
+-- version : 2.1.0
 
 -- CONFIG: every values have to be float number. use float like 1.0 not 1.
 local POWER_ATTACK_CHARGE_PERIOD = 3.0 -- 1.0 as default. longer charging period results higher damage.
 local RAPID_CHARGE_PERIOD = 0.5 -- 1.0 as default
 local COMBO_INTERVAL = 0.1 -- default: 0.28
-local COMBO_ATTACK_RATE = 2.0 -- defalut: 1.0
-local POWER_ATTACK_RATE = 3.5 -- CAUTION: set this value too high result OP! 
+local COMBO_ATTACK_RATE = 1.5 -- defalut: 1.0
+local POWER_ATTACK_RATE = 2.0 -- CAUTION: set this value too high result OP! 
 local ALLIVIATE_STAMINA_COST = 100.0 -- higher value expend less stamina.
-local DELAY_EXPLOSION = 0.1 -- default: 3.0 :set lower for insta explosion.
+local DELAY_EXPLOSION = 0.1 -- default: 3.0 :set lower for insta explosion. require restart the game.
 
 -- DO NOT TOUCH UNDER THIS LINE
-local re_ = re
 local sdk_ = sdk
-local _DEFAULT_VALUE = 1.0
-local _is_requested_by_player = false
 local _charge_deltatime = 0.0
-local elapsed_time = 0.0
-local _is_spell = false
+-- list of hash
+local BURST_BOLT_HASH = 2550907203
+local FOCUSED_BOLT_HASH = 1425099050
+local MAGE_MAGIC_BOLT_HASH = 1126541769
+local SORCERER_MAGIC_BOLT_HASH = 144413685
+local BURST_BOLT_EXPLOSION_HASH = 1430605661
 
 local _character_manager
 local function GetCharacterManager()
@@ -49,33 +50,10 @@ local function GetManualPlayer()
     return _player_chara
 end
 
-local _human
-local function GetManualPlayerHuman()
-    _human = _get_component(_human, GetCharacterManager, "get_ManualPlayerHuman")
-    return _human
-end
-
-local _hit_controller
-local function GetHitController()
-    if not _hit_controller then
-        local human = GetManualPlayerHuman()
-        if human then
-            _hit_controller = human:get_field("Hit")
-        end
-    end
-    return _hit_controller
-end
-
 local _human_param
 local function GetHumanParam()
     _human_param = _get_component(_human_param, GetCharacterManager, "get_HumanParam()")
     return _human_param
-end
-
-local _magic_user_action_context
-local function GetMagicUserActionContext()
-    _magic_user_action_context = _get_component(_magic_user_action_context, GetManualPlayerHuman, "get_JobMagicUserActionContext()")
-    return _magic_user_action_context
 end
 
 local _job_param
@@ -159,59 +137,20 @@ local function GetStaminaManager()
     return _stamina_manager
 end
 
-local function on_post_requestNormalAttack()
-    local current_job = _player_chara:get_field("<Human>k__BackingField"):get_JobContext():get_field("CurrentJob")
-    if current_job == 6 or current_job == 3 then
-        _is_spell = false
-        _is_requested_by_player = true
+local function on_post_requestNormalAttack(chara)
+    local job = chara:get_field("<Human>k__BackingField"):get_JobContext():get_field("CurrentJob")
+    if job == 6 or job == 3 then
+        -- _is_requested_by_player = true
         updateBurstShotParameter(POWER_ATTACK_CHARGE_PERIOD)
         updatePowerShotParameter(POWER_ATTACK_CHARGE_PERIOD)
-        print("player attacked")
     end
 end
 
-local function on_post_release_action()
-    if _is_spell then return end
-    _hit_controller = GetHitController()
-    if _hit_controller then
-        _magic_user_action_context = GetMagicUserActionContext()
-        if _magic_user_action_context then
-            if not _magic_user_action_context:get_IsChargingShot() then
-                _hit_controller:set_BaseAttackRate(COMBO_ATTACK_RATE)
-            else
-                if _charge_deltatime < 1.0 then
-                    _hit_controller:set_BaseAttackRate(POWER_ATTACK_RATE)
-                else
-                    _hit_controller:set_BaseAttackRate(POWER_ATTACK_RATE * _charge_deltatime)
-                    _charge_deltatime = 0.0
-                end
-            end
-            print("new attack rate ", _hit_controller:get_BaseAttackRate())
-            _is_requested_by_player = false
-        end
-    end
-end
-
-local function on_pre_set_default ()
-    _hit_controller = GetHitController()
-    if _hit_controller then
-        _hit_controller:set_BaseAttackRate(_DEFAULT_VALUE)
-        _is_spell = true
-        print("custom skills or job changed", _hit_controller:get_BaseAttackRate())
-    end
-end
-
-local function on_pre_set_rapid_charge_shot()
-    if _is_spell then return end
-    local current_job = _player_chara:get_field("<Human>k__BackingField"):get_JobContext():get_field("CurrentJob")
-    if current_job == 6 or current_job == 3 then
+local function on_pre_set_rapid_charge_shot(chara)
+    local job = chara:get_field("<Human>k__BackingField"):get_JobContext():get_field("CurrentJob")
+    if job == 6 or job == 3 then
         updateBurstShotParameter(RAPID_CHARGE_PERIOD)
         updatePowerShotParameter(RAPID_CHARGE_PERIOD)
-        _hit_controller = GetHitController()
-        if _hit_controller then
-            _hit_controller:set_BaseAttackRate(COMBO_ATTACK_RATE)
-            print("combo attack rate ", _hit_controller:get_BaseAttackRate())
-        end
     end
 end
 
@@ -226,14 +165,11 @@ local function initialize_()
     _mage_rapid_shot_param = nil
     _power_shot_param = nil
     _player_chara = nil
-    _hit_controller = nil
-    _magic_user_action_context = nil
-    _human = nil
     _stamina_manager = nil
-    _is_requested_by_player = false
-    _is_spell = false
     _charge_deltatime = 0.0
     _player_chara = GetManualPlayer()
+    _burst_shot_param = GetBurstShotParameter()
+    _power_shot_param = GetHeavyShotParameter()
 end
 
 initialize_()
@@ -260,56 +196,14 @@ sdk.hook(
     end
 )
 
--- need to find methods to hook for HumanSkillID 62 salamander and 64 minevolt.
-sdk_.hook(sdk_.find_type_definition("app.Job06ActionSelector"):get_method("getCustomSkillAction(app.HumanCustomSkillID, app.LocomotionSpeedTypeEnum)"),
-    function (args)
-        if _player_chara == sdk_.to_managed_object(args[2]):get_field("<Chara>k__BackingField") then
-            on_pre_set_default()
-        end
-    end,
-    function (rtval)
-        return rtval
-    end)
-
-sdk_.hook(sdk_.find_type_definition("app.Job03ActionSelector"):get_method("getCustomSkillAction(app.HumanCustomSkillID, app.LocomotionSpeedTypeEnum)"),
-    function (args)
-        if _player_chara == sdk_.to_managed_object(args[2]):get_field("<Chara>k__BackingField") then
-            on_pre_set_default()
-        end
-    end,
-    function (rtval)
-        return rtval
-    end)
-
 -- combo initialization.
 sdk_.hook(sdk_.find_type_definition("app.HumanActionSelector"):get_method("requestComboAction(app.LocomotionSpeedTypeEnum)"),
     function (args)
         if _player_chara == sdk_.to_managed_object(args[2]):get_field("Param"):get_field("Chara") then
-            on_pre_set_rapid_charge_shot()
+            on_pre_set_rapid_charge_shot(sdk_.to_managed_object(args[2]):get_field("Param"):get_field("Chara"))
         end
     end,
     function (rtval)
-        return rtval
-    end)
-
--- JobMagicUserActionSelector.getReleaseAction does not work!
-local caller_sorcerer
-sdk_.hook(sdk_.find_type_definition("app.Job06ActionSelector"):get_method("getReleaseAction(System.UInt32)"),
-    function (args) caller_sorcerer = sdk_.to_managed_object(args[2]):get_field("<Chara>k__BackingField") end,
-    function (rtval)
-        if _player_chara and _player_chara == caller_sorcerer then
-            on_post_release_action()
-        end
-        return rtval
-    end)
-
-local caller_mage
-sdk_.hook(sdk_.find_type_definition("app.Job03ActionSelector"):get_method("getReleaseAction(System.UInt32)"),
-    function (args) caller_mage = sdk_.to_managed_object(args[2]):get_field("<Chara>k__BackingField") end,
-    function (rtval)
-        if _player_chara == caller_mage then
-            on_post_release_action()
-        end
         return rtval
     end)
 
@@ -320,17 +214,12 @@ sdk_.hook(sdk_.find_type_definition("app.HumanActionSelector"):get_method("reque
     end,
     function (rtval)
         if _player_chara == caller_human then
-            on_post_requestNormalAttack()
+            on_post_requestNormalAttack(caller_human)
         end
         return rtval
     end)
 
-sdk_.hook(sdk_.find_type_definition("app.JobContext"):get_method("setJobChanged(app.Character.JobEnum)"),
-    on_pre_set_default,
-    function (rtval)
-        return rtval
-    end)
-
+local cached_multiplier = {}
 sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("registShell(app.Shell)"),
     function (args)
         local app_shell = sdk_.to_managed_object(args[3])
@@ -338,7 +227,18 @@ sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("registShell(
         if caller_chara ~= _player_chara then return end
         local shell_param = app_shell:get_ShellParameter()
         local shell_base_param = shell_param:get_field("ShellBaseParam")
-        if app_shell:get_ShellParamId() == 1430605661 then
+        local shell_hash = app_shell:get_ShellParamId()
+        print("register new shell", shell_hash)
+        -- cache request id and deltatime
+        if shell_hash == BURST_BOLT_HASH or shell_hash == FOCUSED_BOLT_HASH then -- srocerer/mage
+            if _charge_deltatime < 1.0 then
+                _charge_deltatime = 1.0
+            end
+            cached_multiplier[app_shell:get_field("<RequestId>k__BackingField")] = _charge_deltatime
+            print("cached request id and multiplier: ", app_shell:get_field("<RequestId>k__BackingField"), _charge_deltatime)
+            _charge_deltatime = 0.0
+        end
+        if shell_hash == BURST_BOLT_EXPLOSION_HASH then -- Burst bolt explosion delay
             shell_base_param:set_field("LifeTime", DELAY_EXPLOSION)
             args[3] = sdk_.to_ptr(app_shell)
         end
@@ -347,17 +247,65 @@ sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("registShell(
         return rtval
     end)
 
-local last_frame = os.clock()
-re_.on_frame(function ()
+sdk_.hook(sdk_.find_type_definition("app.JobContext"):get_method("setJobChanged(app.Character.JobEnum)"),
+    function () cached_multiplier = {} end,
+    function (rtval)
+        return rtval
+    end)
+
+sdk_.hook(sdk_.find_type_definition("app.HitController"):get_method("calcDamageValue(app.HitController.DamageInfo)"),
+function (args)
+    local damage_info = sdk_.to_managed_object(args[3])
+    -- perhaps better to use _player_chara:get_GameObject()
+    local attacker_hit_controller = damage_info:get_field("<AttackOwnerHitController>k__BackingField")
+    if attacker_hit_controller ~= nil then
+        local attacker_chara = attacker_hit_controller:get_CachedCharacter()
+        if attacker_chara == _player_chara then
+            local attacker_shell_cache = damage_info:get_field("<AttackHitController>k__BackingField"):get_CachedShell()
+            local id_attacked_by = attacker_shell_cache:get_ShellParamId()
+            print("attacked by ", id_attacked_by)
+            local attack_user_data = damage_info:get_field("<AttackUserData>k__BackingField")
+            local origin_rate = attack_user_data:get_field("ActionRate")
+            if id_attacked_by == SORCERER_MAGIC_BOLT_HASH or id_attacked_by == MAGE_MAGIC_BOLT_HASH then
+                attack_user_data:set_field("ActionRate", origin_rate * COMBO_ATTACK_RATE)
+                damage_info:set_field("<AttackUserData>k__BackingField", attack_user_data)
+                args[3] = sdk_.to_ptr(damage_info)
+                print("set rapid shot rate")
+            elseif id_attacked_by == BURST_BOLT_HASH or id_attacked_by == FOCUSED_BOLT_HASH then
+                -- get charge_delta and id for quick charge and power shot
+                local request_id = attacker_shell_cache:get_field("<RequestId>k__BackingField")
+                local multiplier = cached_multiplier[request_id]
+                cached_multiplier[request_id] = nil
+                attack_user_data:set_field("ActionRate", origin_rate * POWER_ATTACK_RATE * multiplier)
+                damage_info:set_field("<AttackUserData>k__BackingField", attack_user_data)
+                args[3] = sdk_.to_ptr(damage_info)
+                print("request power shot id: ", request_id, 'multiplier: ', multiplier)
+            end
+        end
+    end
+end,
+function (rtval)
+    return rtval
+end)
+
+local timer = os.clock()
+local elapsed_time_ = 0.0
+sdk_.hook(sdk_.find_type_definition("app.Job06ActionController"):get_method("update()"),
+function (args)
+    local this = sdk_.to_managed_object(args[2])
+    local caller = this:get_field("Chara")
+    if _player_chara ~= caller then return end
+    local magic_user_context = this:get_field("<JobMagicUserActionContext>k__BackingField")
     local current_frame = os.clock()
-    local deltatime = current_frame - last_frame
-    last_frame = current_frame
-    if _is_requested_by_player then
-        _magic_user_action_context = GetMagicUserActionContext()
-        if _magic_user_action_context:get_IsChargingShot() then
-            elapsed_time = elapsed_time + deltatime
-            if elapsed_time < POWER_ATTACK_CHARGE_PERIOD then
-                _charge_deltatime = elapsed_time
+    local deltatime = current_frame - timer
+    timer = current_frame
+    if magic_user_context == nil then return end
+    if _burst_shot_param["_PrepareTime"] == POWER_ATTACK_CHARGE_PERIOD or _power_shot_param["_PrepareTime"] == POWER_ATTACK_CHARGE_PERIOD then
+        if magic_user_context:get_IsChargingShot() then
+            print("charging", _charge_deltatime)
+            elapsed_time_ = elapsed_time_ + deltatime
+            if elapsed_time_ < POWER_ATTACK_CHARGE_PERIOD then
+                _charge_deltatime = elapsed_time_
                 _stamina_manager = GetStaminaManager()
                 local cost = _stamina_manager:get_MaxValue() * 0.1 * -1.0
                 _stamina_manager:add(cost / ALLIVIATE_STAMINA_COST, false)
@@ -365,8 +313,9 @@ re_.on_frame(function ()
                 _charge_deltatime = POWER_ATTACK_CHARGE_PERIOD
             end
         else
-            _charge_deltatime = 0.0
-            elapsed_time = 0.0
+            elapsed_time_ = 0.0
         end
     end
+end,
+function ()
 end)
