@@ -1,6 +1,6 @@
 -- author : BeerShigachi
--- date : 26 April 2024
--- version : 2.1.0
+-- date : 27 April 2024
+-- version : 2.1.2
 
 -- CONFIG: every values have to be float number. use float like 1.0 not 1.
 local POWER_ATTACK_CHARGE_PERIOD = 3.0 -- 1.0 as default. longer charging period results higher damage.
@@ -19,7 +19,7 @@ local BURST_BOLT_HASH = 2550907203
 local FOCUSED_BOLT_HASH = 1425099050
 local MAGE_MAGIC_BOLT_HASH = 1126541769
 local SORCERER_MAGIC_BOLT_HASH = 144413685
-local BURST_BOLT_EXPLOSION_HASH = 1430605661
+local BURST_BOLT_BLOB_HASH = 1430605661
 
 local _character_manager
 local function GetCharacterManager()
@@ -186,8 +186,8 @@ sdk_.hook(sdk_.find_type_definition("app.Player"):get_method(".ctor"),
         return ...
     end)
 
-sdk.hook(
-    sdk.find_type_definition("app.GuiManager"):get_method("OnChangeSceneType"),
+sdk_.hook(
+    sdk_.find_type_definition("app.GuiManager"):get_method("OnChangeSceneType"),
     function() end,
     function(rtval)
         _player_chara = GetManualPlayer()
@@ -238,9 +238,8 @@ sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("registShell(
             print("cached request id and multiplier: ", app_shell:get_field("<RequestId>k__BackingField"), _charge_deltatime)
             _charge_deltatime = 0.0
         end
-        if shell_hash == BURST_BOLT_EXPLOSION_HASH then -- Burst bolt explosion delay
+        if shell_hash == BURST_BOLT_BLOB_HASH then -- Burst bolt explosion delay
             shell_base_param:set_field("LifeTime", DELAY_EXPLOSION)
-            args[3] = sdk_.to_ptr(app_shell)
         end
     end,
     function (rtval)
@@ -262,27 +261,35 @@ function (args)
         local attacker_chara = attacker_hit_controller:get_CachedCharacter()
         if attacker_chara == _player_chara then
             local attacker_shell_cache = damage_info:get_field("<AttackHitController>k__BackingField"):get_CachedShell()
-            local id_attacked_by = attacker_shell_cache:get_ShellParamId()
-            print("attacked by ", id_attacked_by)
-            local attack_user_data = damage_info:get_field("<AttackUserData>k__BackingField")
-            local origin_rate = attack_user_data:get_field("ActionRate")
-            if id_attacked_by == SORCERER_MAGIC_BOLT_HASH or id_attacked_by == MAGE_MAGIC_BOLT_HASH then
-                attack_user_data:set_field("ActionRate", origin_rate * COMBO_ATTACK_RATE)
-                damage_info:set_field("<AttackUserData>k__BackingField", attack_user_data)
-                args[3] = sdk_.to_ptr(damage_info)
-                print("set rapid shot rate")
-            elseif id_attacked_by == BURST_BOLT_HASH or id_attacked_by == FOCUSED_BOLT_HASH then
-                -- get charge_delta and id for quick charge and power shot
-                local request_id = attacker_shell_cache:get_field("<RequestId>k__BackingField")
-                local multiplier = cached_multiplier[request_id]
-                cached_multiplier[request_id] = nil
-                attack_user_data:set_field("ActionRate", origin_rate * POWER_ATTACK_RATE * multiplier)
-                damage_info:set_field("<AttackUserData>k__BackingField", attack_user_data)
-                args[3] = sdk_.to_ptr(damage_info)
-                print("request power shot id: ", request_id, 'multiplier: ', multiplier)
-            end
+            if attacker_shell_cache ~= nil then
+                local id_attacked_by = attacker_shell_cache:get_ShellParamId()
+                print("attacked by ", id_attacked_by)
+                local attack_user_data = damage_info:get_field("<AttackUserData>k__BackingField")
+                local origin_rate = attack_user_data:get_field("ActionRate")
+                if id_attacked_by == SORCERER_MAGIC_BOLT_HASH or id_attacked_by == MAGE_MAGIC_BOLT_HASH then
+                    attack_user_data:set_field("ActionRate", origin_rate * COMBO_ATTACK_RATE)
+                    damage_info:set_field("<AttackUserData>k__BackingField", attack_user_data)
+                    print("set rapid shot rate")
+                elseif id_attacked_by == BURST_BOLT_HASH or id_attacked_by == FOCUSED_BOLT_HASH then
+                    -- get charge_delta and id for quick charge and power shot
+                    local request_id = attacker_shell_cache:get_field("<RequestId>k__BackingField")
+                    attack_user_data:set_field("ActionRate", origin_rate * POWER_ATTACK_RATE * cached_multiplier[request_id])
+                    damage_info:set_field("<AttackUserData>k__BackingField", attack_user_data)
+                    print("request power shot id: ", request_id, 'multiplier: ', cached_multiplier[request_id])
+                    cached_multiplier[request_id] = nil
+                end
+            end 
         end
     end
+end,
+function (rtval)
+    return rtval
+end)
+
+sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("requestDestroyShell(System.Int32)"),
+function (args)
+    local request_id = sdk_.to_int64(args[3])
+    cached_multiplier[request_id] = nil
 end,
 function (rtval)
     return rtval
