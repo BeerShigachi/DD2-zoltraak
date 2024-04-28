@@ -1,25 +1,33 @@
 -- author : BeerShigachi
--- date : 27 April 2024
--- version : 2.1.2
+-- date : 28 April 2024
+-- version : 2.1.3
 
 -- CONFIG: every values have to be float number. use float like 1.0 not 1.
 local POWER_ATTACK_CHARGE_PERIOD = 3.0 -- 1.0 as default. longer charging period results higher damage.
 local RAPID_CHARGE_PERIOD = 0.5 -- 1.0 as default
 local COMBO_INTERVAL = 0.1 -- default: 0.28
 local COMBO_ATTACK_RATE = 1.5 -- defalut: 1.0
-local POWER_ATTACK_RATE = 2.0 -- CAUTION: set this value too high result OP! 
+local POWER_ATTACK_RATE = 2.0 -- defalut: 1.0: CAUTION: set this value too high result OP!
+local BURST_BOLT_EXPLOTION_RATE = 1.0 -- defalut: 1.0: Burst bolt blob's exlosion. to avoid OP set around 0.9
 local ALLIVIATE_STAMINA_COST = 100.0 -- higher value expend less stamina.
 local DELAY_EXPLOSION = 0.1 -- default: 3.0 :set lower for insta explosion. require restart the game.
 
 -- DO NOT TOUCH UNDER THIS LINE
 local sdk_ = sdk
 local _charge_deltatime = 0.0
+local cached_multiplier = {}
 -- list of hash
 local BURST_BOLT_HASH = 2550907203
+local BURST_BOLT_HOLD_HASH = 1484381992
 local FOCUSED_BOLT_HASH = 1425099050
+local FOCUSED_BOLT_HOLD_HASH = 106531605
 local MAGE_MAGIC_BOLT_HASH = 1126541769
+local MAGE_MAGIC_BOLT_HOLD_HASH = 778730609
 local SORCERER_MAGIC_BOLT_HASH = 144413685
+local SORCERER_MAGIC_BOLT_HOLD_HASH = 1277318571
 local BURST_BOLT_BLOB_HASH = 1430605661
+local BURST_BOLT_EXPLOSION_HASH = 2270892601
+
 
 local _character_manager
 local function GetCharacterManager()
@@ -170,12 +178,13 @@ local function initialize_()
     _player_chara = GetManualPlayer()
     _burst_shot_param = GetBurstShotParameter()
     _power_shot_param = GetHeavyShotParameter()
+    cached_multiplier = {}
 end
 
 initialize_()
 
 -- could use sdk.find_type_definition("app.GuiManager"):get_method("OnChangeSceneType")
-sdk_.hook(sdk_.find_type_definition("app.Player"):get_method(".ctor"),
+sdk_.hook(sdk_.find_type_definition("app.GuiManager"):get_method("OnChangeSceneType"),
     function () end,
     function (...)
         initialize_()
@@ -183,18 +192,9 @@ sdk_.hook(sdk_.find_type_definition("app.Player"):get_method(".ctor"),
         updateBurstShotParameter(RAPID_CHARGE_PERIOD)
         updateMageRapidShot()
         updatePowerShotParameter(RAPID_CHARGE_PERIOD)
+        print("player character: zoltraak", _player_chara)
         return ...
     end)
-
-sdk_.hook(
-    sdk_.find_type_definition("app.GuiManager"):get_method("OnChangeSceneType"),
-    function() end,
-    function(rtval)
-        _player_chara = GetManualPlayer()
-        print("player character", _player_chara)
-        return rtval
-    end
-)
 
 -- combo initialization.
 sdk_.hook(sdk_.find_type_definition("app.HumanActionSelector"):get_method("requestComboAction(app.LocomotionSpeedTypeEnum)"),
@@ -219,7 +219,6 @@ sdk_.hook(sdk_.find_type_definition("app.HumanActionSelector"):get_method("reque
         return rtval
     end)
 
-local cached_multiplier = {}
 sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("registShell(app.Shell)"),
     function (args)
         local app_shell = sdk_.to_managed_object(args[3])
@@ -265,20 +264,22 @@ function (args)
                 local id_attacked_by = attacker_shell_cache:get_ShellParamId()
                 print("attacked by ", id_attacked_by)
                 local attack_user_data = damage_info:get_field("<AttackUserData>k__BackingField")
-                local origin_rate = attack_user_data:get_field("ActionRate")
-                if id_attacked_by == SORCERER_MAGIC_BOLT_HASH or id_attacked_by == MAGE_MAGIC_BOLT_HASH then
-                    attack_user_data:set_field("ActionRate", origin_rate * COMBO_ATTACK_RATE)
-                    damage_info:set_field("<AttackUserData>k__BackingField", attack_user_data)
-                    print("set rapid shot rate")
+                local new_rate = attack_user_data:get_field("ActionRate")
+                if id_attacked_by == SORCERER_MAGIC_BOLT_HASH or id_attacked_by == MAGE_MAGIC_BOLT_HASH or id_attacked_by == SORCERER_MAGIC_BOLT_HOLD_HASH or id_attacked_by == MAGE_MAGIC_BOLT_HOLD_HASH then
+                    new_rate = new_rate * COMBO_ATTACK_RATE
                 elseif id_attacked_by == BURST_BOLT_HASH or id_attacked_by == FOCUSED_BOLT_HASH then
                     -- get charge_delta and id for quick charge and power shot
                     local request_id = attacker_shell_cache:get_field("<RequestId>k__BackingField")
-                    attack_user_data:set_field("ActionRate", origin_rate * POWER_ATTACK_RATE * cached_multiplier[request_id])
-                    damage_info:set_field("<AttackUserData>k__BackingField", attack_user_data)
-                    print("request power shot id: ", request_id, 'multiplier: ', cached_multiplier[request_id])
-                    cached_multiplier[request_id] = nil
+                    new_rate = new_rate * POWER_ATTACK_RATE * cached_multiplier[request_id]
+                    -- cached_multiplier[request_id] = nil
+                elseif id_attacked_by == FOCUSED_BOLT_HOLD_HASH or id_attacked_by == BURST_BOLT_HOLD_HASH then
+                    new_rate = new_rate * POWER_ATTACK_RATE
+                elseif id_attacked_by == BURST_BOLT_EXPLOSION_HASH then
+                    new_rate = new_rate * BURST_BOLT_EXPLOTION_RATE
                 end
-            end 
+                attack_user_data:set_field("ActionRate", new_rate)
+                damage_info:set_field("<AttackUserData>k__BackingField", attack_user_data)
+            end
         end
     end
 end,
@@ -289,7 +290,10 @@ end)
 sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("requestDestroyShell(System.Int32)"),
 function (args)
     local request_id = sdk_.to_int64(args[3])
-    cached_multiplier[request_id] = nil
+    if cached_multiplier[request_id] ~= nil then
+        print("delete cache", cached_multiplier[request_id])
+        cached_multiplier[request_id] = nil
+    end
 end,
 function (rtval)
     return rtval
