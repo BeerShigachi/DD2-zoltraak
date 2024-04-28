@@ -1,6 +1,6 @@
 -- author : BeerShigachi
 -- date : 28 April 2024
--- version : 2.1.3
+-- version : 2.2.0
 
 -- CONFIG: every values have to be float number. use float like 1.0 not 1.
 local POWER_ATTACK_CHARGE_PERIOD = 3.0 -- 1.0 as default. longer charging period results higher damage.
@@ -8,7 +8,7 @@ local RAPID_CHARGE_PERIOD = 0.5 -- 1.0 as default
 local COMBO_INTERVAL = 0.1 -- default: 0.28
 local COMBO_ATTACK_RATE = 1.5 -- defalut: 1.0
 local POWER_ATTACK_RATE = 2.0 -- defalut: 1.0: CAUTION: set this value too high result OP!
-local BURST_BOLT_EXPLOTION_RATE = 1.0 -- defalut: 1.0: Burst bolt blob's exlosion. to avoid OP set around 0.9
+local BURST_BOLT_EXPLOSION_RATE = 1.0 -- defalut: 1.0: Burst bolt blob's exlosion. to avoid OP set around 0.9
 local ALLIVIATE_STAMINA_COST = 100.0 -- higher value expend less stamina.
 local DELAY_EXPLOSION = 0.1 -- default: 3.0 :set lower for insta explosion. require restart the game.
 
@@ -275,7 +275,7 @@ function (args)
                 elseif id_attacked_by == FOCUSED_BOLT_HOLD_HASH or id_attacked_by == BURST_BOLT_HOLD_HASH then
                     new_rate = new_rate * POWER_ATTACK_RATE
                 elseif id_attacked_by == BURST_BOLT_EXPLOSION_HASH then
-                    new_rate = new_rate * BURST_BOLT_EXPLOTION_RATE
+                    new_rate = new_rate * BURST_BOLT_EXPLOSION_RATE
                 end
                 attack_user_data:set_field("ActionRate", new_rate)
                 damage_info:set_field("<AttackUserData>k__BackingField", attack_user_data)
