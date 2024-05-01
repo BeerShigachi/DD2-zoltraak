@@ -1,6 +1,6 @@
 -- author : BeerShigachi
 -- date : 28 April 2024
--- version : 2.2.0
+-- version : 2.3.0
 
 -- CONFIG: every values have to be float number. use float like 1.0 not 1.
 local POWER_ATTACK_CHARGE_PERIOD = 3.0 -- 1.0 as default. longer charging period results higher damage.
@@ -11,6 +11,14 @@ local POWER_ATTACK_RATE = 2.0 -- defalut: 1.0: CAUTION: set this value too high 
 local BURST_BOLT_EXPLOSION_RATE = 1.0 -- defalut: 1.0: Burst bolt blob's exlosion. to avoid OP set around 0.9
 local ALLIVIATE_STAMINA_COST = 100.0 -- higher value expend less stamina.
 local DELAY_EXPLOSION = 0.1 -- default: 3.0 :set lower for insta explosion. require restart the game.
+
+-- VFX_SIZE_SCALE
+local RAPID_CHARGE_SHOT_SCALE_X = 1.0
+local RAPID_CHARGE_SHOT_SCALE_Y = 1.0
+local RAPID_CHARGE_SHOT_SCALE_Z = 1.0
+local POWER_SHOT_SCALE_X = 1.5
+local POWER_SHOT_SCALE_Y = 1.5
+local POWER_SHOT_SCALE_Z = 1.5
 
 -- DO NOT TOUCH UNDER THIS LINE
 local sdk_ = sdk
@@ -230,10 +238,22 @@ sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("registShell(
         print("register new shell", shell_hash)
         -- cache request id and deltatime
         if shell_hash == BURST_BOLT_HASH or shell_hash == FOCUSED_BOLT_HASH then -- srocerer/mage
+            local new_vector3 = ValueType.new(sdk_.find_type_definition("via.vec3"))
             if _charge_deltatime < 1.0 then
+                -- rapid charge
                 _charge_deltatime = 1.0
+                new_vector3.x = RAPID_CHARGE_SHOT_SCALE_X
+                new_vector3.y = RAPID_CHARGE_SHOT_SCALE_Y
+                new_vector3.z = RAPID_CHARGE_SHOT_SCALE_Z
+            else
+                -- power shot
+                new_vector3.x = POWER_SHOT_SCALE_X
+                new_vector3.y = POWER_SHOT_SCALE_Y
+                new_vector3.z = POWER_SHOT_SCALE_Z
             end
-            cached_multiplier[app_shell:get_field("<RequestId>k__BackingField")] = _charge_deltatime
+            shell_base_param["UseScale"] = true
+            shell_base_param["Scale"] = new_vector3
+            cached_multiplier[app_shell["<RequestId>k__BackingField"]] = _charge_deltatime
             print("cached request id and multiplier: ", app_shell:get_field("<RequestId>k__BackingField"), _charge_deltatime)
             _charge_deltatime = 0.0
         end
@@ -271,7 +291,6 @@ function (args)
                     -- get charge_delta and id for quick charge and power shot
                     local request_id = attacker_shell_cache:get_field("<RequestId>k__BackingField")
                     new_rate = new_rate * POWER_ATTACK_RATE * cached_multiplier[request_id]
-                    -- cached_multiplier[request_id] = nil
                 elseif id_attacked_by == FOCUSED_BOLT_HOLD_HASH or id_attacked_by == BURST_BOLT_HOLD_HASH then
                     new_rate = new_rate * POWER_ATTACK_RATE
                 elseif id_attacked_by == BURST_BOLT_EXPLOSION_HASH then
