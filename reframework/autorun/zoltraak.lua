@@ -1,5 +1,5 @@
 -- author : BeerShigachi
--- date : 28 April 2024
+-- date : 1 May 2024
 -- version : 2.3.0
 
 -- CONFIG: every values have to be float number. use float like 1.0 not 1.
@@ -13,12 +13,15 @@ local ALLIVIATE_STAMINA_COST = 100.0 -- higher value expend less stamina.
 local DELAY_EXPLOSION = 0.1 -- default: 3.0 :set lower for insta explosion. require restart the game.
 
 -- VFX_SIZE_SCALE
-local RAPID_CHARGE_SHOT_SCALE_X = 1.0
-local RAPID_CHARGE_SHOT_SCALE_Y = 1.0
-local RAPID_CHARGE_SHOT_SCALE_Z = 1.0
-local POWER_SHOT_SCALE_X = 1.5
-local POWER_SHOT_SCALE_Y = 1.5
-local POWER_SHOT_SCALE_Z = 1.5
+local NORMAL_SHOT_SCALE_X = 1.0
+local NORMAL_SHOT_SCALE_Y = 1.0
+local NORMAL_SHOT_SCALE_Z = 1.0
+local RAPID_CHARGE_SHOT_SCALE_X = 2.0
+local RAPID_CHARGE_SHOT_SCALE_Y = 2.0
+local RAPID_CHARGE_SHOT_SCALE_Z = 2.0
+local POWER_SHOT_SCALE_X = 2.5
+local POWER_SHOT_SCALE_Y = 2.5
+local POWER_SHOT_SCALE_Z = 2.5
 
 -- DO NOT TOUCH UNDER THIS LINE
 local sdk_ = sdk
@@ -36,6 +39,27 @@ local SORCERER_MAGIC_BOLT_HOLD_HASH = 1277318571
 local BURST_BOLT_BLOB_HASH = 1430605661
 local BURST_BOLT_EXPLOSION_HASH = 2270892601
 
+
+local SIGNETURES = {
+    NORMAL_SHOT_SIGNETURE = 0,
+    POWER_SHOT_SIGNETURE = 1,
+    BURST_BOLT_BLOG_SIGNETURE = 2,
+    BURST_BOLT_EXPLSION_SIGNETURE = 3,
+}
+
+
+local SHELL_HASH_TABLE = {
+    [BURST_BOLT_HASH] = SIGNETURES.POWER_SHOT_SIGNETURE,
+    [BURST_BOLT_HOLD_HASH] = SIGNETURES.POWER_SHOT_SIGNETURE,
+    [FOCUSED_BOLT_HASH] = SIGNETURES.POWER_SHOT_SIGNETURE,
+    [FOCUSED_BOLT_HOLD_HASH] = SIGNETURES.POWER_SHOT_SIGNETURE,
+    [MAGE_MAGIC_BOLT_HASH] = SIGNETURES.NORMAL_SHOT_SIGNETURE,
+    [MAGE_MAGIC_BOLT_HOLD_HASH] = SIGNETURES.NORMAL_SHOT_SIGNETURE,
+    [SORCERER_MAGIC_BOLT_HASH] = SIGNETURES.NORMAL_SHOT_SIGNETURE,
+    [SORCERER_MAGIC_BOLT_HOLD_HASH] = SIGNETURES.NORMAL_SHOT_SIGNETURE,
+    [BURST_BOLT_BLOB_HASH] = SIGNETURES.BURST_BOLT_BLOG_SIGNETURE,
+    [BURST_BOLT_EXPLOSION_HASH] = SIGNETURES.BURST_BOLT_EXPLSION_SIGNETURE
+}
 
 local _character_manager
 local function GetCharacterManager()
@@ -236,8 +260,16 @@ sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("registShell(
         local shell_base_param = shell_param:get_field("ShellBaseParam")
         local shell_hash = app_shell:get_ShellParamId()
         print("register new shell", shell_hash)
+        
+        if SHELL_HASH_TABLE[shell_hash] == SIGNETURES.NORMAL_SHOT_SIGNETURE then
+            local new_vector3 = ValueType.new(sdk_.find_type_definition("via.vec3"))
+            new_vector3.x = NORMAL_SHOT_SCALE_X
+            new_vector3.y = NORMAL_SHOT_SCALE_Y
+            new_vector3.z = NORMAL_SHOT_SCALE_Z
+            shell_base_param["UseScale"] = true
+            shell_base_param["Scale"] = new_vector3
         -- cache request id and deltatime
-        if shell_hash == BURST_BOLT_HASH or shell_hash == FOCUSED_BOLT_HASH then -- srocerer/mage
+        elseif SHELL_HASH_TABLE[shell_hash] == SIGNETURES.POWER_SHOT_SIGNETURE then
             local new_vector3 = ValueType.new(sdk_.find_type_definition("via.vec3"))
             if _charge_deltatime < 1.0 then
                 -- rapid charge
@@ -256,8 +288,7 @@ sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("registShell(
             cached_multiplier[app_shell["<RequestId>k__BackingField"]] = _charge_deltatime
             print("cached request id and multiplier: ", app_shell:get_field("<RequestId>k__BackingField"), _charge_deltatime)
             _charge_deltatime = 0.0
-        end
-        if shell_hash == BURST_BOLT_BLOB_HASH then -- Burst bolt explosion delay
+        elseif SHELL_HASH_TABLE[shell_hash] == SIGNETURES.BURST_BOLT_BLOG_SIGNETURE then -- Blob lifetime is used for Burst bolt explosion delay
             shell_base_param:set_field("LifeTime", DELAY_EXPLOSION)
         end
     end,
@@ -285,15 +316,13 @@ function (args)
                 print("attacked by ", id_attacked_by)
                 local attack_user_data = damage_info:get_field("<AttackUserData>k__BackingField")
                 local new_rate = attack_user_data:get_field("ActionRate")
-                if id_attacked_by == SORCERER_MAGIC_BOLT_HASH or id_attacked_by == MAGE_MAGIC_BOLT_HASH or id_attacked_by == SORCERER_MAGIC_BOLT_HOLD_HASH or id_attacked_by == MAGE_MAGIC_BOLT_HOLD_HASH then
+                if SHELL_HASH_TABLE[id_attacked_by] == SIGNETURES.NORMAL_SHOT_SIGNETURE then
                     new_rate = new_rate * COMBO_ATTACK_RATE
-                elseif id_attacked_by == BURST_BOLT_HASH or id_attacked_by == FOCUSED_BOLT_HASH then
+                elseif SHELL_HASH_TABLE[id_attacked_by] == SIGNETURES.POWER_SHOT_SIGNETURE then
                     -- get charge_delta and id for quick charge and power shot
-                    local request_id = attacker_shell_cache:get_field("<RequestId>k__BackingField")
+                    local request_id = attacker_shell_cache["<RequestId>k__BackingField"]
                     new_rate = new_rate * POWER_ATTACK_RATE * cached_multiplier[request_id]
-                elseif id_attacked_by == FOCUSED_BOLT_HOLD_HASH or id_attacked_by == BURST_BOLT_HOLD_HASH then
-                    new_rate = new_rate * POWER_ATTACK_RATE
-                elseif id_attacked_by == BURST_BOLT_EXPLOSION_HASH then
+                elseif SHELL_HASH_TABLE[id_attacked_by] == SIGNETURES.BURST_BOLT_EXPLSION_SIGNETURE then
                     new_rate = new_rate * BURST_BOLT_EXPLOSION_RATE
                 end
                 attack_user_data:set_field("ActionRate", new_rate)
