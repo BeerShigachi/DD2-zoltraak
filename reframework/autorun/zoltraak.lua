@@ -1,5 +1,5 @@
 -- author : BeerShigachi
--- date : 1 May 2024
+-- date : 2 May 2024
 -- version : 2.3.0
 
 -- CONFIG: every values have to be float number. use float like 1.0 not 1.
@@ -12,7 +12,7 @@ local BURST_BOLT_EXPLOSION_RATE = 1.0 -- defalut: 1.0: Burst bolt blob's exlosio
 local ALLIVIATE_STAMINA_COST = 100.0 -- higher value expend less stamina.
 local DELAY_EXPLOSION = 0.1 -- default: 3.0 :set lower for insta explosion. require restart the game.
 
--- VFX_SIZE_SCALE
+-- CONFIG: VFX_SIZE_SCALE
 local NORMAL_SHOT_SCALE_X = 1.0
 local NORMAL_SHOT_SCALE_Y = 1.0
 local NORMAL_SHOT_SCALE_Z = 1.0
@@ -22,6 +22,14 @@ local RAPID_CHARGE_SHOT_SCALE_Z = 2.0
 local POWER_SHOT_SCALE_X = 2.5
 local POWER_SHOT_SCALE_Y = 2.5
 local POWER_SHOT_SCALE_Z = 2.5
+local BURST_BLOB_SCALE_X = 1.0
+local BURST_BLOB_SCALE_Y = 1.0
+local BURST_BLOB_SCALE_Z = 1.0
+local BURST_EXPLOSION_SCALE_X = 1.0
+local BURST_EXPLOSION_SCALE_Y = 1.0
+local BURST_EXPLOSION_SCALE_Z = 1.0
+
+
 
 -- DO NOT TOUCH UNDER THIS LINE
 local sdk_ = sdk
@@ -251,6 +259,20 @@ sdk_.hook(sdk_.find_type_definition("app.HumanActionSelector"):get_method("reque
         return rtval
     end)
 
+local cache_vector3 = ValueType.new(sdk_.find_type_definition("via.vec3"))
+local function get_new_vector3(x, y, z)
+    local function fixed_size(val)
+        if val < 0.1 then
+            return 0.1
+        end
+        return val
+    end
+    cache_vector3.x = fixed_size(x)
+    cache_vector3.y = fixed_size(y)
+    cache_vector3.z = fixed_size(z)
+    return cache_vector3
+end
+
 sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("registShell(app.Shell)"),
     function (args)
         local app_shell = sdk_.to_managed_object(args[3])
@@ -260,37 +282,31 @@ sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("registShell(
         local shell_base_param = shell_param:get_field("ShellBaseParam")
         local shell_hash = app_shell:get_ShellParamId()
         print("register new shell", shell_hash)
-        
         if SHELL_HASH_TABLE[shell_hash] == SIGNETURES.NORMAL_SHOT_SIGNETURE then
-            local new_vector3 = ValueType.new(sdk_.find_type_definition("via.vec3"))
-            new_vector3.x = NORMAL_SHOT_SCALE_X
-            new_vector3.y = NORMAL_SHOT_SCALE_Y
-            new_vector3.z = NORMAL_SHOT_SCALE_Z
-            shell_base_param["UseScale"] = true
-            shell_base_param["Scale"] = new_vector3
+            shell_base_param["Scale"] = get_new_vector3(NORMAL_SHOT_SCALE_X, NORMAL_SHOT_SCALE_Y, NORMAL_SHOT_SCALE_Z)
         -- cache request id and deltatime
         elseif SHELL_HASH_TABLE[shell_hash] == SIGNETURES.POWER_SHOT_SIGNETURE then
-            local new_vector3 = ValueType.new(sdk_.find_type_definition("via.vec3"))
             if _charge_deltatime < 1.0 then
                 -- rapid charge
                 _charge_deltatime = 1.0
-                new_vector3.x = RAPID_CHARGE_SHOT_SCALE_X
-                new_vector3.y = RAPID_CHARGE_SHOT_SCALE_Y
-                new_vector3.z = RAPID_CHARGE_SHOT_SCALE_Z
+                shell_base_param["Scale"] = get_new_vector3(RAPID_CHARGE_SHOT_SCALE_X, RAPID_CHARGE_SHOT_SCALE_Y, RAPID_CHARGE_SHOT_SCALE_Z)
             else
                 -- power shot
-                new_vector3.x = POWER_SHOT_SCALE_X
-                new_vector3.y = POWER_SHOT_SCALE_Y
-                new_vector3.z = POWER_SHOT_SCALE_Z
+                shell_base_param["Scale"] = get_new_vector3(POWER_SHOT_SCALE_X, POWER_SHOT_SCALE_Y, POWER_SHOT_SCALE_Z)
             end
-            shell_base_param["UseScale"] = true
-            shell_base_param["Scale"] = new_vector3
             cached_multiplier[app_shell["<RequestId>k__BackingField"]] = _charge_deltatime
             print("cached request id and multiplier: ", app_shell:get_field("<RequestId>k__BackingField"), _charge_deltatime)
             _charge_deltatime = 0.0
-        elseif SHELL_HASH_TABLE[shell_hash] == SIGNETURES.BURST_BOLT_BLOG_SIGNETURE then -- Blob lifetime is used for Burst bolt explosion delay
+        -- Blob lifetime is used for Burst bolt explosion delay
+        elseif SHELL_HASH_TABLE[shell_hash] == SIGNETURES.BURST_BOLT_BLOG_SIGNETURE then
             shell_base_param:set_field("LifeTime", DELAY_EXPLOSION)
+            shell_base_param["Scale"] = get_new_vector3(BURST_BLOB_SCALE_X, BURST_BLOB_SCALE_Y, BURST_BLOB_SCALE_Z)
+        elseif SHELL_HASH_TABLE[shell_hash] == SIGNETURES.BURST_BOLT_EXPLSION_SIGNETURE then
+            shell_base_param["Scale"] = get_new_vector3(BURST_EXPLOSION_SCALE_X, BURST_EXPLOSION_SCALE_Y, BURST_EXPLOSION_SCALE_Z)
+        else
+            return
         end
+        shell_base_param["UseScale"] = true
     end,
     function (rtval)
         return rtval
