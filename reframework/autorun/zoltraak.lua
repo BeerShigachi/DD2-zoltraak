@@ -16,12 +16,12 @@ local DELAY_EXPLOSION = 0.1 -- default: 3.0 :set lower for insta explosion. requ
 local NORMAL_SHOT_SCALE_X = 1.0
 local NORMAL_SHOT_SCALE_Y = 1.0
 local NORMAL_SHOT_SCALE_Z = 1.0
-local RAPID_CHARGE_SHOT_SCALE_X = 2.0
-local RAPID_CHARGE_SHOT_SCALE_Y = 2.0
-local RAPID_CHARGE_SHOT_SCALE_Z = 2.0
-local POWER_SHOT_SCALE_X = 2.5
-local POWER_SHOT_SCALE_Y = 2.5
-local POWER_SHOT_SCALE_Z = 2.5
+local RAPID_CHARGE_SHOT_SCALE_X = 1.0
+local RAPID_CHARGE_SHOT_SCALE_Y = 1.0
+local RAPID_CHARGE_SHOT_SCALE_Z = 1.0
+local POWER_SHOT_SCALE_X = 2.0
+local POWER_SHOT_SCALE_Y = 2.0
+local POWER_SHOT_SCALE_Z = 2.0
 local BURST_BLOB_SCALE_X = 1.0
 local BURST_BLOB_SCALE_Y = 1.0
 local BURST_BLOB_SCALE_Z = 1.0
@@ -32,6 +32,11 @@ local BURST_EXPLOSION_SCALE_Z = 1.0
 
 
 -- DO NOT TOUCH UNDER THIS LINE
+
+if reframework.get_commit_count() < 1644 then
+	re.msg("Ordinary Offensive Magic: Your REFramework is older version.\n If the mod does not work, Get version `REF Nightly 913` from\nhttps://github.com/praydog/REFramework-nightly/releases")
+end
+
 local sdk_ = sdk
 local _charge_deltatime = 0.0
 local cached_multiplier = {}
@@ -259,18 +264,18 @@ sdk_.hook(sdk_.find_type_definition("app.HumanActionSelector"):get_method("reque
         return rtval
     end)
 
-local cache_vector3 = ValueType.new(sdk_.find_type_definition("via.vec3"))
 local function get_new_vector3(x, y, z)
+    local new_vector3 = ValueType.new(sdk_.find_type_definition("via.vec3"))
     local function fixed_size(val)
         if val < 0.1 then
             return 0.1
         end
         return val
     end
-    cache_vector3.x = fixed_size(x)
-    cache_vector3.y = fixed_size(y)
-    cache_vector3.z = fixed_size(z)
-    return cache_vector3
+    new_vector3.x = fixed_size(x)
+    new_vector3.y = fixed_size(y)
+    new_vector3.z = fixed_size(z)
+    return new_vector3
 end
 
 sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("registShell(app.Shell)"),
@@ -281,7 +286,6 @@ sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("registShell(
         local shell_param = app_shell:get_ShellParameter()
         local shell_base_param = shell_param:get_field("ShellBaseParam")
         local shell_hash = app_shell:get_ShellParamId()
-        print("register new shell", shell_hash)
         if SHELL_HASH_TABLE[shell_hash] == SIGNETURES.NORMAL_SHOT_SIGNETURE then
             shell_base_param["Scale"] = get_new_vector3(NORMAL_SHOT_SCALE_X, NORMAL_SHOT_SCALE_Y, NORMAL_SHOT_SCALE_Z)
         -- cache request id and deltatime
@@ -295,7 +299,6 @@ sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("registShell(
                 shell_base_param["Scale"] = get_new_vector3(POWER_SHOT_SCALE_X, POWER_SHOT_SCALE_Y, POWER_SHOT_SCALE_Z)
             end
             cached_multiplier[app_shell["<RequestId>k__BackingField"]] = _charge_deltatime
-            print("cached request id and multiplier: ", app_shell:get_field("<RequestId>k__BackingField"), _charge_deltatime)
             _charge_deltatime = 0.0
         -- Blob lifetime is used for Burst bolt explosion delay
         elseif SHELL_HASH_TABLE[shell_hash] == SIGNETURES.BURST_BOLT_BLOG_SIGNETURE then
@@ -325,11 +328,10 @@ function (args)
     local attacker_hit_controller = damage_info:get_field("<AttackOwnerHitController>k__BackingField")
     if attacker_hit_controller ~= nil then
         local attacker_chara = attacker_hit_controller:get_CachedCharacter()
-        if attacker_chara == _player_chara then
+        if attacker_chara == _player_chara and damage_info:get_field("<AttackHitController>k__BackingField") ~= nil then
             local attacker_shell_cache = damage_info:get_field("<AttackHitController>k__BackingField"):get_CachedShell()
             if attacker_shell_cache ~= nil then
                 local id_attacked_by = attacker_shell_cache:get_ShellParamId()
-                print("attacked by ", id_attacked_by)
                 local attack_user_data = damage_info:get_field("<AttackUserData>k__BackingField")
                 local new_rate = attack_user_data:get_field("ActionRate")
                 if SHELL_HASH_TABLE[id_attacked_by] == SIGNETURES.NORMAL_SHOT_SIGNETURE then
@@ -355,7 +357,6 @@ sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("requestDestr
 function (args)
     local request_id = sdk_.to_int64(args[3])
     if cached_multiplier[request_id] ~= nil then
-        print("delete cache", cached_multiplier[request_id])
         cached_multiplier[request_id] = nil
     end
 end,
@@ -377,8 +378,8 @@ function (args)
     if magic_user_context == nil then return end
     if _burst_shot_param["_PrepareTime"] == POWER_ATTACK_CHARGE_PERIOD or _power_shot_param["_PrepareTime"] == POWER_ATTACK_CHARGE_PERIOD then
         if magic_user_context:get_IsChargingShot() then
-            print("charging", _charge_deltatime)
             elapsed_time_ = elapsed_time_ + deltatime
+            -- print(elapsed_time_)
             if elapsed_time_ < POWER_ATTACK_CHARGE_PERIOD then
                 _charge_deltatime = elapsed_time_
                 _stamina_manager = GetStaminaManager()
