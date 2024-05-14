@@ -1,6 +1,6 @@
 -- author : BeerShigachi
--- date : 2 May 2024
--- version : 2.3.0
+-- date : 14 May 2024
+-- version : 2.3.1
 
 -- CONFIG: every values have to be float number. use float like 1.0 not 1.
 local POWER_ATTACK_CHARGE_PERIOD = 3.0 -- 1.0 as default. longer charging period results higher damage.
