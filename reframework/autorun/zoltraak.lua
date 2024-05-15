@@ -1,6 +1,6 @@
 -- author : BeerShigachi
--- date : 14 May 2024
--- version : 2.3.1
+-- date : 16 May 2024
+-- version : 2.4.0
 
 -- CONFIG: every values have to be float number. use float like 1.0 not 1.
 local POWER_ATTACK_CHARGE_PERIOD = 3.0 -- 1.0 as default. longer charging period results higher damage.
@@ -192,8 +192,7 @@ end
 
 local function on_post_requestNormalAttack(chara)
     local job = chara:get_field("<Human>k__BackingField"):get_JobContext():get_field("CurrentJob")
-    if job == 6 or job == 3 then
-        -- _is_requested_by_player = true
+    if job == 6 or job == 3 or job == 10 then
         updateBurstShotParameter(POWER_ATTACK_CHARGE_PERIOD)
         updatePowerShotParameter(POWER_ATTACK_CHARGE_PERIOD)
     end
@@ -201,7 +200,7 @@ end
 
 local function on_pre_set_rapid_charge_shot(chara)
     local job = chara:get_field("<Human>k__BackingField"):get_JobContext():get_field("CurrentJob")
-    if job == 6 or job == 3 then
+    if job == 6 or job == 3 or job == 10 then
         updateBurstShotParameter(RAPID_CHARGE_PERIOD)
         updatePowerShotParameter(RAPID_CHARGE_PERIOD)
     end
@@ -316,7 +315,10 @@ sdk_.hook(sdk_.find_type_definition("app.ShellManager"):get_method("registShell(
     end)
 
 sdk_.hook(sdk_.find_type_definition("app.JobContext"):get_method("setJobChanged(app.Character.JobEnum)"),
-    function () cached_multiplier = {} end,
+    function ()
+        -- specify chara  here.
+        cached_multiplier = {}
+    end,
     function (rtval)
         return rtval
     end)
