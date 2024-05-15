@@ -1,2 +1,3 @@
-Mod Page
-https://www.nexusmods.com/dragonsdogma2/mods/665
+# Mod Page
+
+[Ordinary Offensive Magic](https://www.nexusmods.com/dragonsdogma2/mods/665)
