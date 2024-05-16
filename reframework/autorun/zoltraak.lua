@@ -33,7 +33,7 @@ local BURST_EXPLOSION_SCALE_Z = 1.0
 
 -- DO NOT TOUCH UNDER THIS LINE
 
-if reframework.get_commit_count() < 1644 then
+if reframework.get_commit_count() < 1645 then
 	re.msg("Ordinary Offensive Magic: Your REFramework is older version.\n If the mod does not work, Get version `REF Nightly 913` from\nhttps://github.com/praydog/REFramework-nightly/releases")
 end
 
